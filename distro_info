@@ -3,6 +3,10 @@
 import argparse
 import requests
 import sys
+import os
+import textwrap
+import threading
+import time
 from io import BytesIO
 from PIL import Image, UnidentifiedImageError
 from bs4 import BeautifulSoup
@@ -10,7 +14,8 @@ from urllib.parse import quote, urljoin
 
 
 class Scraper:
-    ASCII_CHARS = list('ᐧ+#*;%@•oDS')
+    ASCII_CHARS = list('ᐧ.+*:%@#o•■')
+    WIDTH = os.get_terminal_size().columns
     BASE_URL = 'https://distrowatch.com'
     INFO_PATH = '/table.php?distribution='
 
@@ -40,7 +45,7 @@ class Scraper:
     def img_converter(self):
         img = self.table.find('hr').next_sibling
         url = urljoin(self.BASE_URL, img['src'])
-        size = 150, 75
+        size = self.WIDTH, self.WIDTH // 2
         response = requests.get(url)
         self._img = Image.open(BytesIO(response.content))
         self._img.convert('L')
@@ -64,48 +69,74 @@ class Scraper:
         edge = '-' * (width + 1) + '-\n'
         return edge + '\n'.join(rendered) + '\n' + edge
 
-    @staticmethod
-    def attribution():
-        return 'All information provided by https://distrowatch.com'
 
 
 class App:
     BOLD = '\033[1m'
     BLUE = '\033[94m'
     YELLOW = '\033[93m'
-    END = '\033[0m'
+    RED = '\033[31m'
+    RESET = '\033[0m'
+    WIDTH = os.get_terminal_size().columns
 
     def __init__(self, **kwargs):
         self.distro = args.distro or self.prompt()
-        self.scraper = Scraper(self.distro)
         self.img_opt = args.image
-        if not self.scraper.table:
-            print('Distro not found!')
-            sys.exit(0)
+        self.scraper = None
 
     def display(self):
+        self.scraper = Scraper(self.distro)
+        if not self.scraper.table:
+            print(self.color(self.RED, 'Distro not found!'))
+            sys.exit(0)
         if self.img_opt:
-            try:
-                self.scraper.img_converter()
-                print(self.scraper.render_img())
-            except (TypeError, UnidentifiedImageError):
-                print('Image could not be converted to ASCII')
-            print()
+            self.display_img()
         for key, value in self.scraper.info().items():
-            print(f'{self.BOLD + self.YELLOW + key + self.END}: {value}')
+            print(textwrap.fill(
+                f'{self.color(key, self.BOLD, self.YELLOW)}: {value}',
+                self.WIDTH
+            )) 
         print()
-        print(self.scraper.description())
-        print()
-        print(self.scraper.attribution())
+        print(textwrap.fill(self.scraper.description(), self.WIDTH), end='\n\n')
+        print(self.attribution())
+
+    def display_img(self):
+        try:
+            self.scraper.img_converter()
+            print(self.scraper.render_img())
+        except (TypeError, UnidentifiedImageError):
+            print(self.color(
+                'Image could not be converted to ASCII',
+                self.RED
+            ), end='\n\n')
 
     def prompt(self):
         self.distro = input(
-            f'{self.BLUE}{self.BOLD}Search for a Linux distro/BSD: {self.END}'
-        )
+            self.color(
+                'Search for a Linux distro/BSD: ',
+                self.BLUE, 
+                self.BOLD 
+            )
+        ).lower()
         return self.distro
 
+    def color(self, s, *styles):
+        style_list = [style for style in styles]
+        return ''.join(style_list) + s + self.RESET
 
-if __name__ == '__main__':
+    @staticmethod
+    def attribution():
+        return 'All information provided by https://distrowatch.com'
+
+    @staticmethod
+    def waiting():
+        chars = '|/-\\'
+        for char in chars:
+            print(char, end='\r')
+            sys.stdout.write("\033[?25l")
+            time.sleep(0.1)
+
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         'distro', 
@@ -124,4 +155,19 @@ will launch in interactive mode.
     )
     args = parser.parse_args()
     app = App(**vars(args))
-    app.display()
+    try:
+        display = threading.Thread(name='process', target=app.display)
+        display.daemon = True
+        display.start()
+        while display.is_alive():
+            app.waiting()
+    except (KeyboardInterrupt, EOFError):
+        print()
+        print(app.color('Goodbye!', app.RED))
+        sys.exit(0)
+    finally:
+        sys.stdout.write("\033[?25h")
+
+
+if __name__ == '__main__':
+    main()
