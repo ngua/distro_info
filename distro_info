@@ -70,7 +70,6 @@ class Scraper:
         return edge + '\n'.join(rendered) + '\n' + edge
 
 
-
 class App:
     BOLD = '\033[1m'
     BLUE = '\033[94m'
@@ -136,7 +135,8 @@ class App:
             sys.stdout.write("\033[?25l")
             time.sleep(0.1)
 
-def main():
+
+if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument(
         'distro', 
@@ -167,7 +167,3 @@ will launch in interactive mode.
         sys.exit(0)
     finally:
         sys.stdout.write("\033[?25h")
-
-
-if __name__ == '__main__':
-    main()
