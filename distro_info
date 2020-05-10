@@ -119,14 +119,13 @@ class App:
             ), end='\n\n')
 
     def prompt(self):
-        self.distro = input(
+        return input(
             self.color(
                 'Search for a Linux distro/BSD: ',
                 self.BLUE,
                 self.BOLD
             )
         ).lower()
-        return self.distro
 
     def color(self, s, *styles):
         style_list = [style for style in styles]
