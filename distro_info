@@ -21,20 +21,33 @@ class Scraper:
 
     def __init__(self, search):
         self.search = quote(search)
-        self._img = None
+        self.img = None
 
     @property
-    def _soup(self):
-        request = requests.get(self.BASE_URL + self.INFO_PATH + self.search)
-        return BeautifulSoup(request.text, 'lxml')
+    def soup(self):
+        try:
+            request = requests.get(
+                self.BASE_URL + self.INFO_PATH + self.search
+            )
+            return BeautifulSoup(request.text, 'lxml')
+        except requests.RequestException as e:
+            raise type(e)(
+                f'Could not complete request to distrowatch: {e.message}'
+            )
 
     @property
     def table(self):
-        return self._soup.find('td', class_='TablesTitle')
+        return self.soup.find('td', class_='TablesTitle')
+
+    @property
+    def pixels(self):
+        pixels = [pixel for pixel in list(self.img.getdata())]
+        ascii_pixels = [self.ASCII_CHARS[pixel // 25] for pixel in pixels]
+        return ''.join(ascii_pixel for ascii_pixel in ascii_pixels)
 
     def info(self):
         data = self.table.find_all('li')
-        elems = [item.get_text().split(':') for item in data ]
+        elems = [item.get_text().split(':') for item in data]
         info = {item[0]: item[1].strip('\n') for item in elems}
         info.pop('Popularity', None)
         return info
@@ -47,22 +60,16 @@ class Scraper:
         url = urljoin(self.BASE_URL, img['src'])
         size = self.WIDTH, self.WIDTH // 2
         response = requests.get(url)
-        self._img = Image.open(BytesIO(response.content))
-        self._img.convert('L')
-        self._img.thumbnail(size)
-
-    @property
-    def _pixels(self):
-        pixels = [pixel for pixel in list(self._img.getdata())]
-        ascii_pixels = [self.ASCII_CHARS[pixel // 25] for pixel in pixels]
-        return ''.join(ascii_pixel for ascii_pixel in ascii_pixels)
+        self.img = Image.open(BytesIO(response.content))
+        self.img.convert('L')
+        self.img.thumbnail(size)
 
     def render_img(self):
-        width = self._img.width
+        width = self.img.width
         rendered = [
-            '|' + self._pixels[i:i + width] + '|' for i in range(
-                0, 
-                len(self._pixels), 
+            '|' + self.pixels[i:i + width] + '|' for i in range(
+                0,
+                len(self.pixels),
                 int(width * 2)
             )
         ]
@@ -94,9 +101,11 @@ class App:
             print(textwrap.fill(
                 f'{self.color(key, self.BOLD, self.YELLOW)}: {value}',
                 self.WIDTH
-            )) 
+            ))
         print()
-        print(textwrap.fill(self.scraper.description(), self.WIDTH), end='\n\n')
+        print(textwrap.fill(
+            self.scraper.description(), self.WIDTH
+        ), end='\n\n')
         print(self.attribution())
 
     def display_img(self):
@@ -113,8 +122,8 @@ class App:
         self.distro = input(
             self.color(
                 'Search for a Linux distro/BSD: ',
-                self.BLUE, 
-                self.BOLD 
+                self.BLUE,
+                self.BOLD
             )
         ).lower()
         return self.distro
@@ -139,18 +148,18 @@ class App:
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        'distro', 
+        'distro',
         help='''
 Specify a Linux/BSD distribution to query. If none is provided, distro-info
 will launch in interactive mode.
-        ''', 
-        nargs='?', 
+        ''',
+        nargs='?',
         default=None
     )
     parser.add_argument(
         '-i',
         '--image',
-        help='Display ASCII representation distro logo',
+        help='Display ASCII representation of distro logo',
         action='store_true'
     )
     args = parser.parse_args()
