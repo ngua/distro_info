@@ -20,4 +20,5 @@ Tested on Arch.
 
 ## Screenshot
 
-![](./distroinfo.png)
+![](./screenshots/void.png)
+![](./screenshots/arch.png)
